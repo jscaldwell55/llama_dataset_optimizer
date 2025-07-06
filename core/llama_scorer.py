@@ -2,7 +2,7 @@
 
 import torch
 from tqdm import tqdm
-from ..utils.llama_utils import apply_chat_template
+from utils.llama_utils import apply_chat_template
 
 @torch.no_grad()
 def batch_compute_learning_value(dataset, model, tokenizer, batch_size: int):

@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModel, AutoTokenizer
-from ..utils.llama_utils import apply_chat_template
+from utils.llama_utils import apply_chat_template
 
 def get_sentence_transformer_embeddings(dataset, config, tokenizer, batch_size=32):
     """
