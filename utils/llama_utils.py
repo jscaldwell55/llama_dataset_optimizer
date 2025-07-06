@@ -7,7 +7,7 @@ def load_model_and_tokenizer(
     model_name: str, 
     use_4bit: bool = False,
     use_flash_attn: bool = True
-) -> (AutoModelForCausalLM, AutoTokenizer):
+) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     """
     Loads a Llama model and its tokenizer with optional optimizations.
     """

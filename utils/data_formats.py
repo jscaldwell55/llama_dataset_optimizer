@@ -40,9 +40,10 @@ def load_and_normalize_dataset(path: str, split: str = "train") -> Dataset:
          # Already in the correct format
          return dataset
 
-    # Example for Alpaca format: 'instruction', 'input', 'output'
-    elif 'instruction' in dataset.column_names and 'output' in dataset.column_names:
-        print("Detected 'instruction'/'output' columns. Converting to Llama format.")
+    # Example for Alpaca format: 'instruction', 'input', 'output' or 'response'
+    elif 'instruction' in dataset.column_names and ('output' in dataset.column_names or 'response' in dataset.column_names):
+        output_key = 'output' if 'output' in dataset.column_names else 'response'
+        print(f"Detected 'instruction'/'{output_key}' columns. Converting to Llama format.")
         for sample in tqdm(dataset, desc="Normalizing Alpaca format"):
             user_content = sample['instruction']
             if 'input' in sample and sample['input']:
@@ -51,7 +52,7 @@ def load_and_normalize_dataset(path: str, split: str = "train") -> Dataset:
             normalized_data.append({
                 "messages": [
                     {"role": "user", "content": user_content},
-                    {"role": "assistant", "content": sample['output']}
+                    {"role": "assistant", "content": sample[output_key]}
                 ]
             })
         return Dataset.from_list(normalized_data)
@@ -60,5 +61,5 @@ def load_and_normalize_dataset(path: str, split: str = "train") -> Dataset:
         raise ValueError(
             "Unsupported dataset format. Please provide a dataset in either "
             "Ultrachat/ShareGPT format (with a 'messages' column) or "
-            "Alpaca format (with 'instruction' and 'output' columns)."
+            "Alpaca format (with 'instruction' and 'output'/'response' columns)."
         )
