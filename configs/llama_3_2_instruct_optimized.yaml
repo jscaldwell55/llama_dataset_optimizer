@@ -1,0 +1,61 @@
+# llama_dataset_optimizer/configs/llama_3_2_instruct_optimized.yaml
+
+# Enhanced configuration for production-ready optimization
+model_family: "Llama-3.2-Instruct"
+
+# --- Enhanced Filtering Settings ---
+quality_filters:
+  min_turns: 2
+  max_turns: 12
+  min_tokens_per_turn: 15 # Slightly higher for better quality
+  max_tokens_per_turn: 2048
+  min_total_tokens: 100
+  max_total_tokens: 4096 # Consider model's context window
+  must_have_roles: ["user", "assistant"]
+  check_for_refusal: true
+  refusal_patterns:
+    - "i'm sorry"
+    - "i cannot"
+    - "i am unable"
+    - "as an ai"
+    - "i can't help with that"
+    - "as a large language model"
+    - "i don't have the ability"
+    - "i'm not able to"
+    - "i cannot provide"
+    - "i'm not allowed"
+  balanced_conversation_ratio: 0.25 # Stricter balance requirement
+
+# --- Enhanced Deduplication Settings ---
+deduplication:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2" # Fast and effective
+  similarity_threshold: 0.92 # More aggressive deduplication
+  method: "sentence_transformer" # Use sentence_transformer or llama_model
+
+# --- Scoring Weights ---
+# Optimized weights based on empirical testing
+scoring_weights:
+  learning_value: 0.6 # Higher weight on learning value
+  quality: 0.3
+  diversity: 0.1 # Lower since deduplication handles this
+
+# --- Processing Parameters ---
+# Optimized batch sizes for modern GPUs
+batch_sizes:
+  quality_filtering: 2000 # Larger batches for filtering
+  embedding: 512 # Balanced for embedding generation
+  scoring: 32 # Conservative for perplexity scoring
+
+# --- Advanced Settings ---
+advanced:
+  # Memory optimization
+  clear_cache_between_phases: true
+  use_gradient_checkpointing: true
+  
+  # Quality thresholds
+  min_perplexity_score: 0.1 # Filter out samples with very low perplexity
+  max_perplexity_score: 0.9 # Filter out samples with very high perplexity
+  
+  # Diversity settings
+  enforce_topic_diversity: false # Future feature
+  max_similar_samples: 5 # Future feature

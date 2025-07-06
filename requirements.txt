@@ -13,6 +13,9 @@ peft # For LoRA fine-tuning in validation
 # GPU-accelerated similarity search
 faiss-gpu # For CUDA-enabled FAISS
 
+# Sentence transformers for better embeddings
+sentence-transformers
+
 # Utility libraries
 pyyaml # For reading config files
 numpy

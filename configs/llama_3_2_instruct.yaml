@@ -24,9 +24,9 @@ quality_filters:
 
 # --- Deduplication Settings ---
 deduplication:
-  embedding_model: "meta-llama/Llama-3-8B-Instruct" # Use a capable but small model for embeddings
-  similarity_threshold: 0.98 # High threshold to remove near-duplicates
-  method: "faiss-gpu"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2" # Fast and effective sentence transformer
+  similarity_threshold: 0.95 # High threshold to remove near-duplicates
+  method: "sentence_transformer" # Use sentence_transformer or llama_model
 
 # --- Scoring Weights ---
 # How to combine the different scores into a final ranking score.
