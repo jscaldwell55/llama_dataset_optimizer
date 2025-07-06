@@ -11,7 +11,7 @@ datasets
 peft # For LoRA fine-tuning in validation
 
 # GPU-accelerated similarity search
-faiss-gpu # For CUDA-enabled FAISS
+faiss-cpu # For CUDA-enabled FAISS
 
 # Sentence transformers for better embeddings
 sentence-transformers
