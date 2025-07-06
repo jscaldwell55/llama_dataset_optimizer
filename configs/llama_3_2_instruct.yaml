@@ -1,0 +1,43 @@
+# llama_dataset_optimizer/configs/llama_3_2_instruct.yaml
+
+# Optimal settings for Llama 3.2 Instruct models
+model_family: "Llama-3.2-Instruct"
+
+# --- Filtering Settings ---
+quality_filters:
+  min_turns: 1
+  max_turns: 10
+  min_tokens_per_turn: 10 # Min tokens for any single user or assistant message
+  max_tokens_per_turn: 3072
+  min_total_tokens: 50
+  max_total_tokens: 4096 # Consider model's context window
+  must_have_roles: ["user", "assistant"]
+  check_for_refusal: true
+  refusal_patterns:
+    - "i'm sorry"
+    - "i cannot"
+    - "i am unable"
+    - "as an ai"
+    - "i can't help with that"
+    - "as a large language model"
+  balanced_conversation_ratio: 0.3 # Max allowed ratio difference between user/assistant tokens
+
+# --- Deduplication Settings ---
+deduplication:
+  embedding_model: "meta-llama/Llama-3-8B-Instruct" # Use a capable but small model for embeddings
+  similarity_threshold: 0.98 # High threshold to remove near-duplicates
+  method: "faiss-gpu"
+
+# --- Scoring Weights ---
+# How to combine the different scores into a final ranking score.
+scoring_weights:
+  learning_value: 0.5
+  quality: 0.3
+  diversity: 0.2 # Diversity is implicitly handled by deduplication, but this weight allows for future explicit metrics
+
+# --- Processing Parameters ---
+# Batch sizes can be tuned for your specific hardware.
+batch_sizes:
+  quality_filtering: 512
+  embedding: 256
+  scoring: 64 # Scoring is the most memory-intensive step

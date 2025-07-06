@@ -1,0 +1,24 @@
+# llama_dataset_optimizer/requirements.txt
+
+# Core ML/DL framework
+torch
+transformers
+accelerate
+bitsandbytes
+
+# Hugging Face ecosystem
+datasets
+peft # For LoRA fine-tuning in validation
+
+# GPU-accelerated similarity search
+faiss-gpu # For CUDA-enabled FAISS
+
+# Utility libraries
+pyyaml # For reading config files
+numpy
+tqdm # For progress bars
+scikit-learn # For diversity metrics
+
+# Optional: for A100+ performance
+# Install manually with: pip install flash-attn --no-build-isolation
+# flash-attn

@@ -1,0 +1,35 @@
+# llama_dataset_optimizer/configs/llama_3_1_base.yaml
+
+# Settings for fine-tuning Llama 3.1 base models
+model_family: "Llama-3.1-Base"
+
+# --- Filtering Settings ---
+# Base models often benefit from more structured, single-turn data.
+quality_filters:
+  min_turns: 1
+  max_turns: 1 # Often fine-tuned on instruction-response pairs
+  min_tokens_per_turn: 20
+  max_tokens_per_turn: 3072
+  min_total_tokens: 50
+  max_total_tokens: 4096
+  must_have_roles: ["user", "assistant"] # Or "instruction", "output"
+  check_for_refusal: false # Base models don't have refusal training
+  balanced_conversation_ratio: 0.2
+
+# --- Deduplication Settings ---
+deduplication:
+  embedding_model: "meta-llama/Llama-3-8B-Instruct"
+  similarity_threshold: 0.95
+  method: "faiss-gpu"
+
+# --- Scoring Weights ---
+scoring_weights:
+  learning_value: 0.6 # Base models have more to "learn"
+  quality: 0.3
+  diversity: 0.1
+
+# --- Processing Parameters ---
+batch_sizes:
+  quality_filtering: 256
+  embedding: 128
+  scoring: 32
