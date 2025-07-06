@@ -16,6 +16,41 @@ from core.quality_filter import batch_quality_check
 from core.deduplicator import get_embeddings, deduplicate_faiss_gpu
 from core.llama_scorer import batch_compute_learning_value
 
+
+class LlamaDatasetOptimizer:
+    """
+    Main class for optimizing datasets using Llama models.
+    """
+    
+    def __init__(self, config_path=None):
+        """
+        Initialize the optimizer with optional config path.
+        """
+        self.config_path = config_path
+        self.logger = None
+        
+    def optimize(self, dataset_path, output_dir, model="meta-llama/Llama-3.2-1B-Instruct", 
+                 config="llama_3_2_instruct_optimized", top_k=10000, 
+                 skip_deduplication=False, validate=False, test_model=None):
+        """
+        Run the optimization pipeline.
+        """
+        # Create argument object to pass to main
+        args = argparse.Namespace(
+            dataset=dataset_path,
+            output=output_dir,
+            model=model,
+            config=config or self.config_path,
+            top_k=top_k,
+            skip_deduplication=skip_deduplication,
+            validate=validate,
+            test_model=test_model
+        )
+        
+        # Run the main optimization function
+        return main(args)
+
+
 def setup_logging(output_dir):
     """Set up logging configuration."""
     log_file = os.path.join(output_dir, f"optimizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
@@ -54,140 +89,136 @@ def main(args):
         logger.error(f"Failed to load configuration: {e}")
         raise
 
-        # 2. Load and Normalize Dataset
-        logger.info("Loading dataset and tokenizer...")
-        base_tokenizer = load_model_and_tokenizer(args.model, use_4bit=False)[1]
-        original_dataset = load_and_normalize_dataset(args.dataset)
-        logger.info(f"Original dataset size: {len(original_dataset)}")
+    # 2. Load and Normalize Dataset
+    logger.info("Loading dataset and tokenizer...")
+    base_tokenizer = load_model_and_tokenizer(args.model, use_4bit=False)[1]
+    original_dataset = load_and_normalize_dataset(args.dataset)
+    logger.info(f"Original dataset size: {len(original_dataset)}")
 
-        # --- Phase 1: Filtering and Deduplication ---
-        logger.info("Starting Phase 1: Filtering and Deduplication")
+    # --- Phase 1: Filtering and Deduplication ---
+    logger.info("Starting Phase 1: Filtering and Deduplication")
 
-        # 3. Quality Filtering
-        logger.info("Applying quality filters...")
-        quality_passed_indices = batch_quality_check(
-            original_dataset, 
+    # 3. Quality Filtering
+    logger.info("Applying quality filters...")
+    quality_passed_indices = batch_quality_check(
+        original_dataset, 
+        config, 
+        base_tokenizer, 
+        batch_size=config['batch_sizes']['quality_filtering']
+    )
+    filtered_dataset = original_dataset.select(quality_passed_indices)
+    logger.info(f"After quality filtering: {len(filtered_dataset)} samples")
+
+    # 4. Semantic Deduplication
+    if not args.skip_deduplication:
+        logger.info("Starting semantic deduplication...")
+        embeddings = get_embeddings(
+            filtered_dataset, 
             config, 
-            base_tokenizer, 
-            batch_size=config['batch_sizes']['quality_filtering']
+            base_tokenizer,
+            batch_size=config['batch_sizes']['embedding']
         )
-        filtered_dataset = original_dataset.select(quality_passed_indices)
-        logger.info(f"After quality filtering: {len(filtered_dataset)} samples")
-
-        # 4. Semantic Deduplication
-        if not args.skip_deduplication:
-            logger.info("Starting semantic deduplication...")
-            embeddings = get_embeddings(
-                filtered_dataset, 
-                config, 
-                base_tokenizer,
-                batch_size=config['batch_sizes']['embedding']
-            )
-            unique_indices = deduplicate_faiss_gpu(
-                embeddings,
-                threshold=config['deduplication']['similarity_threshold']
-            )
-            deduplicated_dataset = filtered_dataset.select(unique_indices)
-            logger.info(f"After deduplication: {len(deduplicated_dataset)} samples")
-        else:
-            logger.info("Skipping deduplication.")
-            deduplicated_dataset = filtered_dataset
+        unique_indices = deduplicate_faiss_gpu(
+            embeddings,
+            threshold=config['deduplication']['similarity_threshold']
+        )
+        deduplicated_dataset = filtered_dataset.select(unique_indices)
+        logger.info(f"After deduplication: {len(deduplicated_dataset)} samples")
+    else:
+        logger.info("Skipping deduplication.")
+        deduplicated_dataset = filtered_dataset
         
-        # --- Phase 2: Scoring and Selection ---
-        logger.info("Starting Phase 2: Scoring and Selection")
+    # --- Phase 2: Scoring and Selection ---
+    logger.info("Starting Phase 2: Scoring and Selection")
 
-        # 5. Learning Value Scoring (with main model)
-        logger.info("Loading scoring model and computing learning values...")
-        scoring_model, scoring_tokenizer = load_model_and_tokenizer(args.model, use_4bit=True)
-        learning_scores_list = batch_compute_learning_value(
-            deduplicated_dataset,
-            scoring_model,
-            scoring_tokenizer,
-            batch_size=config['batch_sizes']['scoring']
-        )
-        learning_scores = np.array(learning_scores_list)
+    # 5. Learning Value Scoring (with main model)
+    logger.info("Loading scoring model and computing learning values...")
+    scoring_model, scoring_tokenizer = load_model_and_tokenizer(args.model, use_4bit=True)
+    learning_scores_list = batch_compute_learning_value(
+        deduplicated_dataset,
+        scoring_model,
+        scoring_tokenizer,
+        batch_size=config['batch_sizes']['scoring']
+    )
+    learning_scores = np.array(learning_scores_list)
 
-        # In this implementation, quality and diversity (uniqueness) are binary filters.
-        # We can represent them as scores of 1.0 for all remaining samples.
-        # A more advanced implementation could have soft scores for these.
-        quality_scores = np.ones(len(deduplicated_dataset))
-        diversity_scores = np.ones(len(deduplicated_dataset))
+    # In this implementation, quality and diversity (uniqueness) are binary filters.
+    # We can represent them as scores of 1.0 for all remaining samples.
+    # A more advanced implementation could have soft scores for these.
+    quality_scores = np.ones(len(deduplicated_dataset))
+    diversity_scores = np.ones(len(deduplicated_dataset))
 
-        # 6. Combine Scores
-        logger.info("Combining scores...")
-        weights = config['scoring_weights']
-        final_scores = (
-            weights['learning_value'] * learning_scores +
-            weights['quality'] * quality_scores +
-            weights['diversity'] * diversity_scores
-        )
+    # 6. Combine Scores
+    logger.info("Combining scores...")
+    weights = config['scoring_weights']
+    final_scores = (
+        weights['learning_value'] * learning_scores +
+        weights['quality'] * quality_scores +
+        weights['diversity'] * diversity_scores
+    )
 
-        # 7. Smart Selection (Top-K)
-        if args.top_k > len(final_scores):
-            logger.warning(f"top_k ({args.top_k}) is larger than available samples ({len(final_scores)}). Using all samples.")
-            args.top_k = len(final_scores)
+    # 7. Smart Selection (Top-K)
+    if args.top_k > len(final_scores):
+        logger.warning(f"top_k ({args.top_k}) is larger than available samples ({len(final_scores)}). Using all samples.")
+        args.top_k = len(final_scores)
 
-        # Get indices of the top-k scores
-        top_k_indices = np.argsort(final_scores)[-args.top_k:]
-        optimized_dataset = deduplicated_dataset.select(top_k_indices)
-        logger.info(f"Selected top {args.top_k} samples based on combined scores.")
+    # Get indices of the top-k scores
+    top_k_indices = np.argsort(final_scores)[-args.top_k:]
+    optimized_dataset = deduplicated_dataset.select(top_k_indices)
+    logger.info(f"Selected top {args.top_k} samples based on combined scores.")
 
-        # --- Phase 3: Export and Validate ---
-        logger.info("Starting Phase 3: Export and Validation")
+    # --- Phase 3: Export and Validate ---
+    logger.info("Starting Phase 3: Export and Validation")
 
-        # 8. Save Optimized Dataset
-        output_file = os.path.join(args.output, "optimized_dataset.jsonl")
-        optimized_dataset.to_json(output_file, orient="records", lines=True)
-        logger.info(f"✅ Optimized dataset saved to: {output_file}")
+    # 8. Save Optimized Dataset
+    output_file = os.path.join(args.output, "optimized_dataset.jsonl")
+    optimized_dataset.to_json(output_file, orient="records", lines=True)
+    logger.info(f"✅ Optimized dataset saved to: {output_file}")
 
-        # 9. Generate Report
-        reduction_ratio = (len(original_dataset) - len(optimized_dataset)) / len(original_dataset)
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "config_used": args.config,
-            "original_size": len(original_dataset),
-            "size_after_quality_filter": len(filtered_dataset),
-            "size_after_deduplication": len(deduplicated_dataset),
-            "optimized_size": len(optimized_dataset),
-            "reduction_percentage": f"{reduction_ratio:.2%}",
-            "final_scores_stats": {
-                "mean": float(np.mean(final_scores)),
-                "std": float(np.std(final_scores)),
-                "min": float(np.min(final_scores)),
-                "max": float(np.max(final_scores))
-            }
+    # 9. Generate Report
+    reduction_ratio = (len(original_dataset) - len(optimized_dataset)) / len(original_dataset)
+    report = {
+        "timestamp": datetime.now().isoformat(),
+        "config_used": args.config,
+        "original_size": len(original_dataset),
+        "size_after_quality_filter": len(filtered_dataset),
+        "size_after_deduplication": len(deduplicated_dataset),
+        "optimized_size": len(optimized_dataset),
+        "reduction_percentage": f"{reduction_ratio:.2%}",
+        "final_scores_stats": {
+            "mean": float(np.mean(final_scores)),
+            "std": float(np.std(final_scores)),
+            "min": float(np.min(final_scores)),
+            "max": float(np.max(final_scores))
         }
-        
-        logger.info("\n--- Optimization Report ---")
-        for key, value in report.items():
-            if key != "final_scores_stats":
-                logger.info(f"{key.replace('_', ' ').title()}: {value}")
-        logger.info("--------------------------")
+    }
+    
+    logger.info("\n--- Optimization Report ---")
+    for key, value in report.items():
+        if key != "final_scores_stats":
+            logger.info(f"{key.replace('_', ' ').title()}: {value}")
+    logger.info("--------------------------")
 
-        # 10. Optional A/B Validation
-        if args.validate:
-            if not args.test_model:
-                logger.warning("--validate flag is set but --test-model is not specified. Skipping validation.")
-            else:
-                logger.info("Starting A/B validation...")
-                validation_results = validate_dataset_improvement(
-                    original_dataset,
-                    optimized_dataset,
-                    args.test_model
-                )
-                report['validation_results'] = validation_results
+    # 10. Optional A/B Validation
+    if args.validate:
+        if not args.test_model:
+            logger.warning("--validate flag is set but --test-model is not specified. Skipping validation.")
+        else:
+            logger.info("Starting A/B validation...")
+            validation_results = validate_dataset_improvement(
+                original_dataset,
+                optimized_dataset,
+                args.test_model
+            )
+            report['validation_results'] = validation_results
         
-        # Save final report
-        report_file = os.path.join(args.output, "report.yaml")
-        with open(report_file, 'w') as f:
-            yaml.dump(report, f, default_flow_style=False)
-        logger.info(f"📊 Full report saved to: {report_file}")
-        
-        logger.info("🎉 Dataset optimization completed successfully!")
-        
-    except Exception as e:
-        logger.error(f"Dataset optimization failed: {e}")
-        raise
+    # Save final report
+    report_file = os.path.join(args.output, "report.yaml")
+    with open(report_file, 'w') as f:
+        yaml.dump(report, f, default_flow_style=False)
+    logger.info(f"📊 Full report saved to: {report_file}")
+    
+    logger.info("🎉 Dataset optimization completed successfully!")
 
 
 if __name__ == "__main__":
