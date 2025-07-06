@@ -29,14 +29,18 @@ def load_model_and_tokenizer(
     # To enable flash attention, the model must be loaded with `attn_implementation="flash_attention_2"`
     # and the library must be installed (`pip install flash-attn`).
     if use_flash_attn:
-        try:
-            model_kwargs["attn_implementation"] = "flash_attention_2"
-            print("Using Flash Attention 2.")
-        except ImportError:
-            print("Flash Attention 2 not available. Falling back to standard attention.")
-            model_kwargs["attn_implementation"] = "sdpa" # PyTorch's scaled dot product attention
+        model_kwargs["attn_implementation"] = "flash_attention_2"
+        print("Using Flash Attention 2.")
 
-    model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+    except ImportError as e:
+        if "flash_attn" in str(e) and use_flash_attn:
+            print("Flash Attention 2 not available. Falling back to standard attention.")
+            model_kwargs["attn_implementation"] = "sdpa"
+            model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
+        else:
+            raise
     
     print(f"Model '{model_name}' loaded successfully on device: {model.device}")
     return model, tokenizer
