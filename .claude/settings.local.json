@@ -4,7 +4,11 @@
       "Bash(find:*)",
       "Bash(python test:*)",
       "Bash(rm:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
