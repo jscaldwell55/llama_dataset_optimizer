@@ -110,7 +110,7 @@ def main(args):
     logger.info(f"After quality filtering: {len(filtered_dataset)} samples")
 
     # 4. Semantic Deduplication
-    if not args.skip_deduplication:
+    if not args.skip_deduplication and len(filtered_dataset) > 0:
         logger.info("Starting semantic deduplication...")
         embeddings = get_embeddings(
             filtered_dataset, 
@@ -125,9 +125,46 @@ def main(args):
         deduplicated_dataset = filtered_dataset.select(unique_indices)
         logger.info(f"After deduplication: {len(deduplicated_dataset)} samples")
     else:
-        logger.info("Skipping deduplication.")
+        if args.skip_deduplication:
+            logger.info("Skipping deduplication.")
+        else:
+            logger.info("Skipping deduplication due to empty dataset after quality filtering.")
         deduplicated_dataset = filtered_dataset
         
+    # Check if we have any samples left after filtering and deduplication
+    if len(deduplicated_dataset) == 0:
+        logger.warning("No samples remaining after filtering and deduplication!")
+        logger.info("Creating empty optimized dataset...")
+        
+        # Save empty dataset
+        output_file = os.path.join(args.output, "optimized_dataset.jsonl")
+        empty_dataset = Dataset.from_list([])
+        empty_dataset.to_json(output_file, orient="records", lines=True)
+        
+        # Generate report for empty result
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "config_used": args.config,
+            "original_size": len(original_dataset),
+            "size_after_quality_filter": len(filtered_dataset),
+            "size_after_deduplication": len(deduplicated_dataset),
+            "optimized_size": 0,
+            "reduction_percentage": "100.00%",
+            "note": "All samples were filtered out. Consider adjusting quality filter thresholds."
+        }
+        
+        logger.info("\n--- Optimization Report ---")
+        for key, value in report.items():
+            logger.info(f"{key.replace('_', ' ').title()}: {value}")
+        
+        # Save report
+        report_file = os.path.join(args.output, "optimization_report.yaml")
+        with open(report_file, 'w') as f:
+            yaml.dump(report, f)
+        logger.info(f"Report saved to: {report_file}")
+        
+        return empty_dataset
+    
     # --- Phase 2: Scoring and Selection ---
     logger.info("Starting Phase 2: Scoring and Selection")
 

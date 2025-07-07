@@ -83,6 +83,11 @@ def get_embeddings(dataset, config, tokenizer, batch_size=32):
     """
     Main embedding function that chooses the best available method.
     """
+    # Handle empty dataset
+    if len(dataset) == 0:
+        print("No samples to generate embeddings for.")
+        return np.array([])
+    
     embedding_method = config['deduplication'].get('method', 'sentence_transformer')
     
     if embedding_method == 'sentence_transformer':
@@ -101,6 +106,11 @@ def deduplicate_faiss_gpu(embeddings: np.ndarray, threshold: float):
     Finds and removes near-duplicates from a set of embeddings using FAISS on GPU.
     Returns the indices of the items to keep.
     """
+    # Handle empty embeddings
+    if len(embeddings) == 0:
+        print("No embeddings to deduplicate.")
+        return []
+    
     print(f"Deduplicating {len(embeddings)} samples with threshold {threshold}...")
     
     d = embeddings.shape[1]
